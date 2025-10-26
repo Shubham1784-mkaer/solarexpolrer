@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar System Explorer</title>
+    <style>
+        body {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: radial-gradient(ellipse at center, #1a1a2e 0%, #0f0f23 100%);
+            overflow: hidden;
+            height: 100%;
+            color: white;
+        }
+
+        html {
+            height: 100%;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        #spaceCanvas {
+            display: block;
+            cursor: grab;
+        }
+
+        #spaceCanvas:active {
+            cursor: grabbing;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #444;
+            pointer-events: auto;
+            max-width: 300px;
+        }
+
+        #infoPanel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #444;
+            pointer-events: auto;
+            max-width: 350px;
+            min-height: 200px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #ccc;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.active {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        .celestial-info {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+
+        .celestial-info h3 {
+            margin: 0 0 10px 0;
+            color: #64b5f6;
+        }
+
+        .celestial-info p {
+            margin: 5px 0;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        #speedDisplay {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            pointer-events: none;
+        }
+
+        .physics-overlay {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 11px;
+            border: 1px solid #555;
+            pointer-events: none;
+            transform: translate(-50%, -100%);
+            margin-top: -10px;
+        }
+
+        .orbit-trail {
+            stroke: rgba(255, 255, 255, 0.3);
+            stroke-width: 1;
+            fill: none;
+            stroke-dasharray: 2, 4;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="spaceCanvas"></canvas>
+        
+        <div id="ui">
+            <div id="controls">
+                <h3 style="margin: 0 0 15px 0; color: #64b5f6;">🚀 Navigation Controls</h3>
+                
+                <div class="control-group">
+                    <label>Camera View:</label>
+                    <div class="control-row">
+                        <button id="followEarth" class="active">Follow Earth</button>
+                        <button id="followMars">Follow Mars</button>
+                        <button id="freeCamera">Free View</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Time Speed: <span id="timeSpeedLabel">1x</span></label>
+                    <input type="range" id="timeSpeed" min="0" max="100" value="10">
+                </div>
+
+                <div class="control-group">
+                    <label>Zoom Level:</label>
+                    <input type="range" id="zoomLevel" min="50" max="2000" value="400">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-row">
+                        <button id="showOrbits">Show Orbits</button>
+                        <button id="showPhysics">Physics Info</button>
+                        <button id="resetView">Reset View</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="infoPanel">
+                <h3 style="margin: 0 0 15px 0; color: #64b5f6;">📚 Celestial Information</h3>
+                <div id="celestialInfo">
+                    <div class="celestial-info">
+                        <h3>🌍 Earth</h3>
+                        <p><strong>Distance from Sun:</strong> 149.6 million km</p>
+                        <p><strong>Orbital Period:</strong> 365.25 days</p>
+                        <p><strong>Orbital Speed:</strong> 29.78 km/s</p>
+                        <p><strong>Mass:</strong> 5.97 × 10²⁴ kg</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="speedDisplay">
+                <div>Time: <span id="currentTime">Day 0</span></div>
+                <div>Speed: <span id="currentSpeed">1x Real Time</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SolarSystemExplorer {
+            constructor() {
+                this.canvas = document.getElementById('spaceCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.setupCanvas();
+                
+                // Physics constants (scaled for visualization)
+                this.AU = 150; // Astronomical Unit in pixels
+                this.timeScale = 1;
+                this.currentTime = 0;
+                
+                // Camera system
+                this.camera = {
+                    x: 0,
+                    y: 0,
+                    zoom: 400,
+                    following: 'earth',
+                    isDragging: false,
+                    lastMouseX: 0,
+                    lastMouseY: 0
+                };
+                
+                // Display options
+                this.showOrbits = true;
+                this.showPhysicsInfo = false;
+                
+                this.initializeCelestialBodies();
+                this.setupEventListeners();
+                this.gameLoop();
+            }
+            
+            setupCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                
+                window.addEventListener('resize', () => {
+                    this.canvas.width = window.innerWidth;
+                    this.canvas.height = window.innerHeight;
+                });
+            }
+            
+            initializeCelestialBodies() {
+                this.sun = {
+                    name: 'Sun',
+                    x: 0,
+                    y: 0,
+                    radius: 20,
+                    color: '#FDB813',
+                    mass: 1.989e30,
+                    info: {
+                        distance: '0 km (Center)',
+                        period: 'N/A',
+                        speed: '0 km/s',
+                        mass: '1.989 × 10³⁰ kg',
+                        description: 'Our star, containing 99.86% of the Solar System\'s mass'
+                    }
+                };
+                
+                this.earth = {
+                    name: 'Earth',
+                    orbitRadius: this.AU,
+                    angle: 0,
+                    angularVelocity: 2 * Math.PI / 365.25, // radians per day
+                    radius: 8,
+                    color: '#6B93D6',
+                    x: 0,
+                    y: 0,
+                    info: {
+                        distance: '149.6 million km',
+                        period: '365.25 days',
+                        speed: '29.78 km/s',
+                        mass: '5.97 × 10²⁴ kg',
+                        description: 'Our home planet, the only known world with life'
+                    }
+                };
+                
+                this.moon = {
+                    name: 'Moon',
+                    parent: this.earth,
+                    orbitRadius: 25,
+                    angle: 0,
+                    angularVelocity: 2 * Math.PI / 27.3, // radians per day
+                    radius: 2,
+                    color: '#C0C0C0',
+                    x: 0,
+                    y: 0,
+                    info: {
+                        distance: '384,400 km from Earth',
+                        period: '27.3 days',
+                        speed: '1.02 km/s',
+                        mass: '7.35 × 10²² kg',
+                        description: 'Earth\'s only natural satellite, responsible for tides'
+                    }
+                };
+                
+                this.mars = {
+                    name: 'Mars',
+                    orbitRadius: this.AU * 1.52,
+                    angle: Math.PI,
+                    angularVelocity: 2 * Math.PI / 687, // radians per day
+                    radius: 6,
+                    color: '#CD5C5C',
+                    x: 0,
+                    y: 0,
+                    info: {
+                        distance: '227.9 million km',
+                        period: '687 days',
+                        speed: '24.07 km/s',
+                        mass: '6.39 × 10²³ kg',
+                        description: 'The Red Planet, target for future human exploration'
+                    }
+                };
+                
+                this.bodies = [this.sun, this.earth, this.moon, this.mars];
+            }
+            
+            setupEventListeners() {
+                // Mouse controls
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.camera.isDragging = true;
+                    this.camera.lastMouseX = e.clientX;
+                    this.camera.lastMouseY = e.clientY;
+                });
+                
+                this.canvas.addEventListener('mousemove', (e) => {
+                    if (this.camera.isDragging && this.camera.following === 'free') {
+                        const deltaX = e.clientX - this.camera.lastMouseX;
+                        const deltaY = e.clientY - this.camera.lastMouseY;
+                        
+                        this.camera.x -= deltaX / this.camera.zoom * 100;
+                        this.camera.y -= deltaY / this.camera.zoom * 100;
+                        
+                        this.camera.lastMouseX = e.clientX;
+                        this.camera.lastMouseY = e.clientY;
+                    }
+                });
+                
+                this.canvas.addEventListener('mouseup', () => {
+                    this.camera.isDragging = false;
+                });
+                
+                // Wheel zoom
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+                    this.camera.zoom = Math.max(50, Math.min(2000, this.camera.zoom * zoomFactor));
+                    document.getElementById('zoomLevel').value = this.camera.zoom;
+                });
+                
+                // UI Controls
+                document.getElementById('followEarth').addEventListener('click', () => {
+                    this.setFollowTarget('earth');
+                });
+                
+                document.getElementById('followMars').addEventListener('click', () => {
+                    this.setFollowTarget('mars');
+                });
+                
+                document.getElementById('freeCamera').addEventListener('click', () => {
+                    this.setFollowTarget('free');
+                });
+                
+                document.getElementById('timeSpeed').addEventListener('input', (e) => {
+                    this.timeScale = parseFloat(e.target.value) / 10;
+                    document.getElementById('timeSpeedLabel').textContent = `${this.timeScale.toFixed(1)}x`;
+                });
+                
+                document.getElementById('zoomLevel').addEventListener('input', (e) => {
+                    this.camera.zoom = parseFloat(e.target.value);
+                });
+                
+                document.getElementById('showOrbits').addEventListener('click', () => {
+                    this.showOrbits = !this.showOrbits;
+                    document.getElementById('showOrbits').classList.toggle('active');
+                });
+                
+                document.getElementById('showPhysics').addEventListener('click', () => {
+                    this.showPhysicsInfo = !this.showPhysicsInfo;
+                    document.getElementById('showPhysics').classList.toggle('active');
+                });
+                
+                document.getElementById('resetView').addEventListener('click', () => {
+                    this.camera.x = 0;
+                    this.camera.y = 0;
+                    this.camera.zoom = 400;
+                    document.getElementById('zoomLevel').value = 400;
+                });
+                
+                // Body clicking for info
+                this.canvas.addEventListener('click', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    
+                    this.checkBodyClick(mouseX, mouseY);
+                });
+            }
+            
+            setFollowTarget(target) {
+                this.camera.following = target;
+                
+                // Update button states
+                document.querySelectorAll('#controls button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                
+                if (target === 'earth') {
+                    document.getElementById('followEarth').classList.add('active');
+                } else if (target === 'mars') {
+                    document.getElementById('followMars').classList.add('active');
+                } else {
+                    document.getElementById('freeCamera').classList.add('active');
+                }
+            }
+            
+            updatePhysics() {
+                this.currentTime += this.timeScale;
+                
+                // Update Earth
+                this.earth.angle += this.earth.angularVelocity * this.timeScale;
+                this.earth.x = Math.cos(this.earth.angle) * this.earth.orbitRadius;
+                this.earth.y = Math.sin(this.earth.angle) * this.earth.orbitRadius;
+                
+                // Update Moon (orbits around Earth)
+                this.moon.angle += this.moon.angularVelocity * this.timeScale;
+                this.moon.x = this.earth.x + Math.cos(this.moon.angle) * this.moon.orbitRadius;
+                this.moon.y = this.earth.y + Math.sin(this.moon.angle) * this.moon.orbitRadius;
+                
+                // Update Mars
+                this.mars.angle += this.mars.angularVelocity * this.timeScale;
+                this.mars.x = Math.cos(this.mars.angle) * this.mars.orbitRadius;
+                this.mars.y = Math.sin(this.mars.angle) * this.mars.orbitRadius;
+                
+                // Update camera following
+                if (this.camera.following === 'earth') {
+                    this.camera.x = -this.earth.x;
+                    this.camera.y = -this.earth.y;
+                } else if (this.camera.following === 'mars') {
+                    this.camera.x = -this.mars.x;
+                    this.camera.y = -this.mars.y;
+                }
+            }
+            
+            render() {
+                // Clear canvas with space background
+                this.ctx.fillStyle = '#0a0a1a';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Add stars
+                this.drawStars();
+                
+                // Save context for camera transform
+                this.ctx.save();
+                
+                // Apply camera transform
+                this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+                this.ctx.scale(this.camera.zoom / 100, this.camera.zoom / 100);
+                this.ctx.translate(this.camera.x, this.camera.y);
+                
+                // Draw orbits
+                if (this.showOrbits) {
+                    this.drawOrbits();
+                }
+                
+                // Draw celestial bodies
+                this.drawBody(this.sun);
+                this.drawBody(this.earth);
+                this.drawBody(this.moon);
+                this.drawBody(this.mars);
+                
+                // Draw physics info overlays
+                if (this.showPhysicsInfo) {
+                    this.drawPhysicsOverlays();
+                }
+                
+                this.ctx.restore();
+                
+                // Update UI
+                this.updateUI();
+            }
+            
+            drawStars() {
+                this.ctx.fillStyle = 'white';
+                for (let i = 0; i < 200; i++) {
+                    const x = (i * 37) % this.canvas.width;
+                    const y = (i * 73) % this.canvas.height;
+                    const size = Math.random() * 2;
+                    this.ctx.fillRect(x, y, size, size);
+                }
+            }
+            
+            drawOrbits() {
+                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                this.ctx.lineWidth = 1;
+                this.ctx.setLineDash([5, 5]);
+                
+                // Earth orbit
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, this.earth.orbitRadius, 0, 2 * Math.PI);
+                this.ctx.stroke();
+                
+                // Mars orbit
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, this.mars.orbitRadius, 0, 2 * Math.PI);
+                this.ctx.stroke();
+                
+                // Moon orbit around Earth
+                this.ctx.beginPath();
+                this.ctx.arc(this.earth.x, this.earth.y, this.moon.orbitRadius, 0, 2 * Math.PI);
+                this.ctx.stroke();
+                
+                this.ctx.setLineDash([]);
+            }
+            
+            drawBody(body) {
+                this.ctx.fillStyle = body.color;
+                this.ctx.beginPath();
+                this.ctx.arc(body.x, body.y, body.radius, 0, 2 * Math.PI);
+                this.ctx.fill();
+                
+                // Add glow effect for sun
+                if (body === this.sun) {
+                    const gradient = this.ctx.createRadialGradient(
+                        body.x, body.y, body.radius,
+                        body.x, body.y, body.radius * 2
+                    );
+                    gradient.addColorStop(0, 'rgba(253, 184, 19, 0.8)');
+                    gradient.addColorStop(1, 'rgba(253, 184, 19, 0)');
+                    
+                    this.ctx.fillStyle = gradient;
+                    this.ctx.beginPath();
+                    this.ctx.arc(body.x, body.y, body.radius * 2, 0, 2 * Math.PI);
+                    this.ctx.fill();
+                }
+                
+                // Draw body name
+                this.ctx.fillStyle = 'white';
+                this.ctx.font = '12px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(body.name, body.x, body.y + body.radius + 15);
+            }
+            
+            drawPhysicsOverlays() {
+                // This would be implemented as HTML overlays positioned over bodies
+                // For now, we'll show velocity vectors
+                this.ctx.strokeStyle = '#64b5f6';
+                this.ctx.lineWidth = 2;
+                
+                // Earth velocity vector
+                const earthVelX = -Math.sin(this.earth.angle) * 30;
+                const earthVelY = Math.cos(this.earth.angle) * 30;
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.earth.x, this.earth.y);
+                this.ctx.lineTo(this.earth.x + earthVelX, this.earth.y + earthVelY);
+                this.ctx.stroke();
+                
+                // Mars velocity vector
+                const marsVelX = -Math.sin(this.mars.angle) * 20;
+                const marsVelY = Math.cos(this.mars.angle) * 20;
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.mars.x, this.mars.y);
+                this.ctx.lineTo(this.mars.x + marsVelX, this.mars.y + marsVelY);
+                this.ctx.stroke();
+            }
+            
+            checkBodyClick(mouseX, mouseY) {
+                // Convert screen coordinates to world coordinates
+                const rect = this.canvas.getBoundingClientRect();
+                const worldX = (mouseX - this.canvas.width / 2) / (this.camera.zoom / 100) - this.camera.x;
+                const worldY = (mouseY - this.canvas.height / 2) / (this.camera.zoom / 100) - this.camera.y;
+                
+                // Check each body
+                for (const body of this.bodies) {
+                    const distance = Math.sqrt((worldX - body.x) ** 2 + (worldY - body.y) ** 2);
+                    if (distance <= body.radius) {
+                        this.showBodyInfo(body);
+                        break;
+                    }
+                }
+            }
+            
+            showBodyInfo(body) {
+                const infoPanel = document.getElementById('celestialInfo');
+                const emoji = body === this.sun ? '☀️' : 
+                             body === this.earth ? '🌍' : 
+                             body === this.moon ? '🌙' : '🔴';
+                
+                infoPanel.innerHTML = `
+                    <div class="celestial-info">
+                        <h3>${emoji} ${body.name}</h3>
+                        <p><strong>Distance from Sun:</strong> ${body.info.distance}</p>
+                        <p><strong>Orbital Period:</strong> ${body.info.period}</p>
+                        <p><strong>Orbital Speed:</strong> ${body.info.speed}</p>
+                        <p><strong>Mass:</strong> ${body.info.mass}</p>
+                        <p><em>${body.info.description}</em></p>
+                    </div>
+                `;
+            }
+            
+            updateUI() {
+                document.getElementById('currentTime').textContent = `Day ${Math.floor(this.currentTime)}`;
+                document.getElementById('currentSpeed').textContent = `${this.timeScale.toFixed(1)}x Real Time`;
+            }
+            
+            gameLoop() {
+                this.updatePhysics();
+                this.render();
+                requestAnimationFrame(() => this.gameLoop());
+            }
+        }
+        
+        // Initialize the game when page loads
+        window.addEventListener('load', () => {
+            new SolarSystemExplorer();
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'994b7719b510a849',t:'MTc2MTQ5NzU1OC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
